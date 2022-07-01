@@ -29,10 +29,10 @@ fn main() {
         topology: topology,
         strip_index_format: index_format
     };
-    let event_loop = EventLoop::new();    
+    let event_loop = EventLoop::new();
     let window = winit::window::Window::new(&event_loop).unwrap(); 
     
     window.set_title(&*format!("{}: {}", "Primitive", primitive_type));
     env_logger::init();   
-    pollster::block_on( common::run(event_loop, window, inputs, 6));    
+    pollster::block_on( common::run(event_loop, window, inputs, 5));    
 }

@@ -1,17 +1,15 @@
-use wgpu::{IndexFormat, PrimitiveTopology, ShaderSource};
+use std::borrow::Cow;
+
+use wgpu::{util::DeviceExt};
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
 
-pub struct Inputs<'a> {
-    pub source : ShaderSource<'a>,
-    pub topology: PrimitiveTopology,
-    pub strip_index_format: Option<IndexFormat>,
-}
 
-pub async fn run(event_loop: EventLoop<()>, window: Window, inputs: Inputs<'_>, num_vertices: u32) {      
+pub async fn run(event_loop: EventLoop<()>, window: Window) {      
+
     let size = window.inner_size();
     let instance = wgpu::Instance::new(wgpu::Backends::all());
     let surface = unsafe { instance.create_surface(&window) };
@@ -37,6 +35,20 @@ pub async fn run(event_loop: EventLoop<()>, window: Window, inputs: Inputs<'_>, 
         )
         .await
         .expect("Failed to create device");
+    
+    //create the vertex buffer that the shader will get vertices from
+    let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Vertex Buffer"),
+        contents: bytemuck::cast_slice(VERTICES),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+    //describe the layout of the vertex buffer
+    let vertex_buffer_layout = wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3],
+    };
+
 
     let format = surface.get_preferred_format(&adapter).unwrap();
     let mut config = wgpu::SurfaceConfiguration {
@@ -51,7 +63,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window, inputs: Inputs<'_>, 
     // Load the shaders from disk
     let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
         label: None,
-        source: inputs.source,
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
     });
     
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -66,7 +78,7 @@ pub async fn run(event_loop: EventLoop<()>, window: Window, inputs: Inputs<'_>, 
         vertex: wgpu::VertexState {
             module: &shader,
             entry_point: "vs_main",
-            buffers: &[],
+            buffers: &[vertex_buffer_layout],
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
@@ -74,8 +86,8 @@ pub async fn run(event_loop: EventLoop<()>, window: Window, inputs: Inputs<'_>, 
             targets: &[format.into()],
         }),
         primitive: wgpu::PrimitiveState{
-            topology:inputs.topology,
-            strip_index_format:inputs.strip_index_format,
+            topology: wgpu::PrimitiveTopology::TriangleStrip,
+            strip_index_format: None,
             ..Default::default()
         },
         depth_stencil: None,
@@ -119,7 +131,8 @@ pub async fn run(event_loop: EventLoop<()>, window: Window, inputs: Inputs<'_>, 
                         depth_stencil_attachment: None,
                     });
                     rpass.set_pipeline(&render_pipeline);
-                    rpass.draw(0..num_vertices, 0..1);
+                    rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    rpass.draw(0..VERTICES.len() as u32, 0..1);
                 }
 
                 queue.submit(Some(encoder.finish()));
@@ -134,3 +147,26 @@ pub async fn run(event_loop: EventLoop<()>, window: Window, inputs: Inputs<'_>, 
         }
     });
 }
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 2],
+    color: [f32; 3],
+}
+//unsafe impl bytemuck::Pod for Vertex {}
+//unsafe impl bytemuck::Zeroable for Vertex {}
+
+const VERTICES: &[Vertex] = &[
+    Vertex { position: [-0.0868241, 0.49240386], color: [0.5, 0.0, 0.5] }, // A
+    Vertex { position: [-0.49513406, 0.06958647], color: [0.5, 0.0, 0.5] }, // B
+    Vertex { position: [0.44147372, 0.2347359], color: [0.5, 0.0, 0.5] }, // E
+    
+    Vertex { position: [-0.49513406, 0.06958647], color: [0.5, 0.0, 0.5] }, // B
+    Vertex { position: [-0.21918549, -0.44939706], color: [0.5, 0.0, 0.5] }, // C
+    Vertex { position: [0.44147372, 0.2347359], color: [0.5, 0.0, 0.5] }, // E
+    
+    Vertex { position: [-0.21918549, -0.44939706], color: [0.5, 0.0, 0.5] }, // C
+    Vertex { position: [0.35966998, -0.3473291], color: [0.5, 0.0, 0.5] }, // D
+    Vertex { position: [0.44147372, 0.2347359], color: [0.5, 0.0, 0.5] }, // E
+];
